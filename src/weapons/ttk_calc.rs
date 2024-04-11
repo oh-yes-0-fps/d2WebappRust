@@ -4,7 +4,6 @@ use serde::Serialize;
 
 use crate::{
     d2_enums::WeaponType,
-    logging::extern_log,
     perks::{get_dmg_modifier, get_firing_modifier, lib::CalculationInput},
 };
 
@@ -126,7 +125,7 @@ pub fn calc_ttk(_weapon: &Weapon, _overshield: f64) -> Vec<ResillienceSummary> {
 
             let ammo_fired;
             if _weapon.firing_data.one_ammo {
-                ammo_fired = opt_bullets_fired/shot_burst_size;
+                ammo_fired = opt_bullets_fired / shot_burst_size;
             } else {
                 ammo_fired = opt_bullets_fired;
             }
@@ -249,7 +248,7 @@ pub fn calc_ttk(_weapon: &Weapon, _overshield: f64) -> Vec<ResillienceSummary> {
 
             let ammo_fired;
             if _weapon.firing_data.one_ammo {
-                ammo_fired = opt_bullets_fired/shot_burst_size;
+                ammo_fired = opt_bullets_fired / shot_burst_size;
             } else {
                 ammo_fired = opt_bullets_fired;
             }

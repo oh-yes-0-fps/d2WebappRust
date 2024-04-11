@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    d2_enums::{AmmoType, BungieHash, DamageType, StatBump, StatHashes, WeaponType},
-    logging::{extern_log, LogLevel},
-};
+use crate::d2_enums::{AmmoType, BungieHash, DamageType, StatBump, StatHashes, WeaponType};
 
 use super::{
     add_dmr, add_epr, add_flmr, add_fmr, add_hmr, add_mmr, add_rmr, add_rsmr, add_sbr, add_vmr,

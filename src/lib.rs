@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-use logging::LogLevel;
 pub mod abilities;
 pub mod activity;
 pub mod d2_enums;
 pub mod enemies;
-pub mod logging;
 pub mod perks;
 #[cfg(test)]
 mod test;
@@ -21,7 +19,6 @@ use d2_enums::StatHashes;
 use enemies::Enemy;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::panic;
 
 mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -53,17 +50,30 @@ use crate::types::py_types::{
 #[cfg(feature = "python")]
 use pyo3::{prelude::*, types::PyDict};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PersistentData {
     pub weapon: Weapon,
     pub activity: Activity,
     pub ability: Ability,
     pub enemy: Enemy,
-    pub log_level: LogLevel,
+    pub log_level: tracing::Level,
 }
+
 impl PersistentData {
     pub fn new() -> PersistentData {
         Self::default()
+    }
+}
+
+impl Default for PersistentData {
+    fn default() -> Self {
+        Self {
+            weapon: Default::default(),
+            activity: Default::default(),
+            ability: Default::default(),
+            enemy: Default::default(),
+            log_level: tracing::Level::INFO,
+        }
     }
 }
 
@@ -72,24 +82,21 @@ thread_local! {
 }
 
 #[cfg(feature = "wasm")]
-#[wasm_bindgen]
-extern "C" {
-    //foreign function interface
-    #[wasm_bindgen(js_namespace = console)]
-    pub fn log(s: &str);
-}
-
-#[cfg(feature = "wasm")]
-#[macro_export]
-macro_rules! console_log {
-    ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
-}
-#[cfg(feature = "wasm")]
 #[wasm_bindgen(start)]
 pub fn start() {
-    panic::set_hook(Box::new(console_error_panic_hook::hook));
+    use tracing_subscriber::{layer::SubscriberExt, Registry};
+    use tracing_wasm::{WASMLayer, WASMLayerConfigBuilder};
+
+    console_error_panic_hook::set_once();
+    let cfg = WASMLayerConfigBuilder::new()
+        .set_max_level(tracing::Level::WARN)
+        .build();
+    let subscriber = Registry::default().with(WASMLayer::new(cfg));
+
+    tracing::subscriber::set_global_default(subscriber).expect("Unable to set global subscriber");
+
+    tracing::info!("D2 Calculator Loaded");
     perks::map_perks();
-    console_log!("D2 Calculator Loaded");
 }
 
 //---------------WEAPONS---------------//
@@ -139,11 +146,11 @@ pub fn set_weapon(
             _damage_type_id,
         );
         if new_weapon.is_err() {
-            console_log!(
-                "Could not find weapon data for type: {}, intrinsic: {}, Err: {:?}",
-                _weapon_type_id,
-                _intrinsic_hash,
-                new_weapon
+            tracing::error!(
+                kind = ?_weapon_type_id,
+                intrinsic = ?_intrinsic_hash,
+                err = ?new_weapon,
+                "Could not find weapon data"
             );
             perm_data.borrow_mut().weapon = Weapon::default();
         } else {
@@ -394,8 +401,21 @@ pub fn set_encounter(
 #[cfg(feature = "wasm")]
 #[wasm_bindgen(js_name = "setLoggingLevel")]
 pub fn set_logging_level(_level: usize) -> Result<(), JsValue> {
+    let level = match _level {
+        0 => tracing::Level::TRACE,
+        1 => tracing::Level::DEBUG,
+        2 => tracing::Level::INFO,
+        3 => tracing::Level::WARN,
+        4 => tracing::Level::ERROR,
+        _ => {
+            return Err(JsValue::from_str(
+                "provided usize is too large; must be 4 or less.",
+            ))
+        }
+    };
+
     PERS_DATA.with(|perm_data| {
-        perm_data.borrow_mut().log_level = _level.into();
+        perm_data.borrow_mut().log_level = level;
     });
     Ok(())
 }
@@ -597,15 +617,11 @@ fn reverse_pve_calc(
     _combatant_mult: Option<f64>,
     _pve_mult: Option<f64>,
 ) -> PyResult<f64> {
-    use logging::extern_log;
     let output = PERS_DATA.with(|perm_data| {
         let combatant_mult = _combatant_mult.unwrap_or(1.0);
         let pve_mult = _pve_mult.unwrap_or(1.0);
         if perm_data.borrow().activity.name == "Default" {
-            extern_log(
-                "Activity is default and can return bad values",
-                LogLevel::Warning,
-            )
+            tracing::warn!("Activity is default and can return bad values")
         }
         activity::damage_calc::remove_pve_bonuses(
             _damage,
